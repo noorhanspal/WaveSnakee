@@ -1,8 +1,9 @@
 """
-Core Snake Game Engine:
-- Smooth movement interpolation + grid collision
-- Food & Bonus Golden Food spawning
-- Persistent High Score storage (per-difficulty and overall)
+Core Snake Game Logic:
+  - Controls snake movement and smooth animation between grid cells
+  - Spawns regular red apples and bonus golden apples
+  - Checks wall collisions and self collisions
+  - Loads and saves high scores in highscore.json
 """
 import json
 import math

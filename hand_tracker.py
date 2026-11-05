@@ -1,11 +1,12 @@
 """
-Real-Time Hand Tracking & Gesture Recognition Module (Ultra-Low Latency).
-Optimizations for smooth 60 FPS gameplay & rock-solid Open Palm detection:
-  1. Uses MediaPipe Tasks RunningMode.VIDEO for fast temporal tracking.
-  2. Tracks `is_open_palm` (1-hand open palm anywhere on screen) and `is_two_palms`
-     (2-hand open palms anywhere on screen) independently of directional zone position,
-     so Open Palm works anywhere in the camera view!
-  3. Hybrid Motion + Zone + Finger-Pointing control for instant directional turns.
+Hand Tracking and Gesture Detection Module.
+How it works:
+  1. Reads frames from the webcam in a background thread so the game never lags.
+  2. Uses MediaPipe to detect 21 landmarks (points) on up to 2 hands.
+  3. Recognizes simple gestures:
+     - Move 1 hand UP / DOWN / LEFT / RIGHT -> Turn the snake
+     - Show 2 Open Palms (both hands) -> Pause or Resume the game
+     - Show 1 Open Palm -> Start or Restart the game
 """
 from collections import deque
 import math

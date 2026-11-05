@@ -1,11 +1,9 @@
 """
 UI Renderer for the Gesture-Controlled Snake Game.
-Renders:
-  - Split-screen layout (Game Board on Left, Webcam + Gesture HUD + Guide on Right)
-  - Smooth interpolated snake with eyes, glowing food, and particle bursts
-  - Start Screen (with Gesture Guide & Difficulty Selector)
-  - Calibration Screen
-  - Pause Overlay & Game Over Screen
+Draws:
+  - Split-screen layout (Game Board on the left, Webcam + Score + Gesture Guide on the right)
+  - Smooth snake body, food items, and particle effects
+  - Start Screen, Calibration Screen, Pause Screen, and Game Over Screen
 """
 import math
 import time
@@ -326,10 +324,10 @@ class GameUI:
 
         # Gesture Guide Cards inside Start Screen
         cards = [
-            ("MOVE 1 HAND UP / DOWN / LEFT / RIGHT", "Move hand outside the green center circle to steer"),
-            ("SHOW 2 HANDS OPEN PALM (DONO HAATH)", "Show both open palms to Pause or Resume the game"),
-            ("SHOW OPEN PALM (KHULA HAATH)", "Hold open palm for 0.6s to Start or Restart"),
-            ("CALIBRATE HAND ('C' KEY)", "Set your comfortable hand position as the center zone"),
+            ("MOVE 1 HAND UP / DOWN / LEFT / RIGHT", "Move your hand in any direction to turn the snake"),
+            ("SHOW 2 OPEN PALMS (BOTH HANDS)", "Show both open hands to Pause or Resume the game"),
+            ("SHOW 1 OPEN PALM", "Hold one open hand briefly to Start or Restart the game"),
+            ("CALIBRATE HAND ('C' KEY)", "Set your comfortable hand position as the center point"),
         ]
         card_y = top + 92
         for head_txt, desc_txt in cards:

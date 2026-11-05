@@ -1,7 +1,7 @@
 """
-Procedural Sound Manager for Gesture Snake Game.
-Uses NumPy + Pygame sndarray to synthesize retro arcade sound effects
-without requiring external .wav/.mp3 files.
+Sound Manager for the Gesture Snake Game.
+Uses NumPy and Pygame to create simple retro arcade sound effects
+directly in code without needing external audio files.
 """
 import numpy as np
 import pygame

@@ -1,6 +1,6 @@
 """
 Main Entry Point for the Gesture-Controlled Snake Game.
-Integrates Pygame UI, Core Snake Engine, Sound Manager, and OpenCV + MediaPipe Hand Tracker.
+Connects the Pygame UI, Snake Game Logic, Sound Effects, and Webcam Hand Tracker.
 """
 import argparse
 import os
