@@ -19,16 +19,17 @@ The **Frontend** is built with **HTML, CSS, and Basic Vanilla JavaScript**, and 
 
 ---
 
-## Hand Gestures & Controls (Combo Sign System)
+## Hand Gestures & Controls
 
-| Hand Sign / Gesture | Game Action | Keyboard Backup |
+| Hand Gesture | Game Action | Keyboard Backup |
 | :--- | :--- | :--- |
-| **1 Finger (`☝️`) or Point Finger Up** | Turn Snake Up | `Up Arrow` / `W` |
-| **2 Fingers (`✌️`) or Point Finger Down** | Turn Snake Down | `Down Arrow` / `S` |
-| **3 Fingers (`🤟`) or Point Finger Left** | Turn Snake Left | `Left Arrow` / `A` |
-| **4/5 Fingers (`🖐️`) or Point Finger Right** | Turn Snake Right | `Right Arrow` / `D` |
+| **Move Hand Right** | Turn Snake Right | `Right Arrow` / `D` |
+| **Move Hand Left** | Turn Snake Left | `Left Arrow` / `A` |
+| **Move Hand Up** | Turn Snake Up | `Up Arrow` / `W` |
+| **Move Hand Down** | Turn Snake Down | `Down Arrow` / `S` |
 | **Show 2 Open Palms (Both Hands)** | Pause / Resume Game | `P` / `Space` |
 | **Show 1 Open Palm** | Start / Restart Game | `R` / `Space` |
+| **Hand Calibration** | Set Center Hand Position | `C` |
 | **Change Speed** | Easy / Medium / Hard | `1` / `2` / `3` |
 
 ---

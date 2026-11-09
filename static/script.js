@@ -425,16 +425,14 @@ function updateUI(data) {
 
     const gestureNames = {
         NONE: "NEUTRAL / IDLE",
-        UP: "UP (1 Finger / Point Up)",
-        DOWN: "DOWN (2 Fingers / Point Down)",
-        LEFT: "LEFT (3 Fingers / Point Left)",
-        RIGHT: "RIGHT (4 Fingers / Point Right)",
+        UP: "UP (Move Up)",
+        DOWN: "DOWN (Move Down)",
+        LEFT: "LEFT (Move Left)",
+        RIGHT: "RIGHT (Move Right)",
         TWO_PALMS: "2 HANDS PALM (Pause/Resume)",
         OPEN_PALM: "OPEN PALM (Start/Restart)"
     };
-    gestureValue.textContent = tracker.sign_label && gestureKey !== "OPEN_PALM" && gestureKey !== "TWO_PALMS"
-        ? tracker.sign_label
-        : (gestureNames[gestureKey] || gestureKey);
+    gestureValue.textContent = gestureNames[gestureKey] || gestureKey;
 
     let gColor = "#8b949e";
     if (["UP", "DOWN", "LEFT", "RIGHT"].includes(gestureKey)) {
