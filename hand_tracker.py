@@ -1,21 +1,21 @@
 """
 Hand Tracking and Gesture Detection Module.
-How it works:
-  1. Reads frames from the webcam in a background thread so the game never lags.
-  2. Uses MediaPipe to detect 21 landmarks (points) on up to 2 hands.
-  3. Recognizes simple gestures:
-     - Move 1 hand UP / DOWN / LEFT / RIGHT -> Turn the snake
-     - Show 2 Open Palms (both hands) -> Pause or Resume the game
-     - Show 1 Open Palm -> Start or Restart the game
+Uses a fast Combo Sign System (Finger Count + 1-Finger Pointing) so the snake
+turns immediately without needing to keep your hand inside a center circle:
+  - 1 Finger Upright (or Point 1 Finger Up)    -> UP
+  - 2 Fingers (or Point 1 Finger Down)         -> DOWN
+  - 3 Fingers (or Point 1 Finger Left)         -> LEFT
+  - 4/5 Fingers (or Point 1 Finger Right)      -> RIGHT
+  - 2 Hands Open Palm (Both Hands)             -> PAUSE / RESUME
+  - 1 Hand Open Palm (on Start / Game Over)    -> START / RESTART
 """
-from collections import deque
 import math
 import os
 import sys
 import threading
 import time
 import types
-from typing import Deque, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -49,10 +49,7 @@ except Exception:
 class HandTracker:
     """
     Captures webcam frames in a background thread, tracks up to 2 hands,
-    and outputs low-latency gestures:
-      - UP / DOWN / LEFT / RIGHT (instant motion delta + zone + index finger pointing)
-      - TWO_PALMS (2 Open Palms -> Pause / Resume)
-      - OPEN_PALM (1 Open Palm anywhere in view -> Start / Restart)
+    and outputs instant directional gestures using Finger Count + 1-Finger Pointing.
     """
 
     def __init__(self, camera_index: int = 0):
@@ -60,7 +57,7 @@ class HandTracker:
         self.cap: Optional[cv2.VideoCapture] = None
         self.camera_available: bool = False
 
-        # Calibration center (normalized 0.0 - 1.0 coordinates in mirrored webcam frame)
+        # Calibration center (kept for compatibility)
         self.calib_x: float = 0.5
         self.calib_y: float = 0.5
         self.neutral_radius: float = config.NEUTRAL_ZONE_RADIUS
@@ -77,17 +74,17 @@ class HandTracker:
         self.hand_detected: bool = False
         self.hands_count: int = 0
         self.open_fingers_count: int = 0
+        self.sign_label: str = "NONE"
         self.hand_pos: Tuple[float, float] = (0.5, 0.5)
 
-        # Frame caching to avoid redundant surface conversion on main Pygame thread
+        # Frame caching
         self.latest_rgb_frame: Optional[np.ndarray] = None
         self._frame_dirty: bool = False
         self._cached_surface: Optional[pygame.Surface] = None
 
-        # Motion history ring buffer: stores (timestamp, x, y) for instant swipe/movement turns
-        self._pos_history: Deque[Tuple[float, float, float]] = deque(maxlen=6)
-        self._last_motion_dir: str = config.GESTURE_NONE
-        self._last_motion_time: float = 0.0
+        # 2-frame stability filter to prevent 1-frame camera flicker while staying instant (~30ms)
+        self._prev_raw_dir: str = config.GESTURE_NONE
+        self._stable_dir: str = config.GESTURE_NONE
 
         # Debounce state for 2-Hand Open Palms (Pause/Resume) and 1-Hand Open Palm (Start/Restart)
         self._last_two_palms_time: float = 0.0
@@ -172,16 +169,12 @@ class HandTracker:
             self.hands_detector = None
 
     def calibrate_center(self) -> bool:
-        """Set the current detected hand position as the neutral center zone."""
         with self._lock:
             if self.hand_detected:
                 self.calib_x = float(np.clip(self.hand_pos[0], 0.22, 0.78))
                 self.calib_y = float(np.clip(self.hand_pos[1], 0.22, 0.78))
                 return True
-            else:
-                self.calib_x = 0.5
-                self.calib_y = 0.5
-                return False
+            return False
 
     def reset_calibration(self) -> None:
         with self._lock:
@@ -194,6 +187,7 @@ class HandTracker:
             return {
                 "gesture": self.current_gesture,
                 "direction_gesture": self.direction_gesture,
+                "sign_label": self.sign_label,
                 "is_open_palm": self.is_open_palm,
                 "is_two_palms": self.is_two_palms,
                 "hand_detected": self.hand_detected,
@@ -228,8 +222,8 @@ class HandTracker:
 
     def consume_open_palm_action(self) -> bool:
         """
-        Return True when the user shows an Open Palm anywhere on screen for PALM_HOLD_SEC.
-        Works regardless of whether the hand is inside or outside the center circle!
+        Return True when the user shows an Open Palm anywhere on screen for 0.35s.
+        Used to Start or Restart the game on menu screens.
         """
         now = time.time()
         with self._lock:
@@ -246,10 +240,6 @@ class HandTracker:
         return False
 
     def get_pygame_surface(self) -> pygame.Surface:
-        """
-        Return the latest annotated webcam frame as a Pygame Surface.
-        Uses dirty-flag caching so surface conversion only runs when a new camera frame arrives.
-        """
         with self._lock:
             if not self._frame_dirty and self._cached_surface is not None:
                 return self._cached_surface
@@ -265,6 +255,21 @@ class HandTracker:
 
         self._cached_surface = pygame.surfarray.make_surface(np.transpose(frame, (1, 0, 2)))
         return self._cached_surface
+
+    def get_jpeg_bytes(self) -> Optional[bytes]:
+        """Return the latest annotated webcam frame encoded as JPEG bytes for the web frontend."""
+        with self._lock:
+            frame = self.latest_rgb_frame.copy() if self.latest_rgb_frame is not None else None
+
+        if frame is None:
+            frame = np.zeros((config.CAM_HEIGHT, config.CAM_WIDTH, 3), dtype=np.uint8)
+            frame[:] = (22, 28, 40)
+
+        bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        ok, buf = cv2.imencode(".jpg", bgr_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+        if not ok:
+            return None
+        return buf.tobytes()
 
     def _capture_loop(self) -> None:
         """Background thread: opens camera at low latency and processes frames continuously."""
@@ -309,7 +314,6 @@ class HandTracker:
             time.sleep(0.001)
 
     def _process_mediapipe_tasks_frame(self, rgb_frame: np.ndarray) -> None:
-        """Detect up to 2 hands using fast MediaPipe VIDEO tracking mode."""
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb_frame))
         ts_ms = int((time.perf_counter() - self._start_perf) * 1000)
         if ts_ms <= self._last_timestamp_ms:
@@ -321,125 +325,157 @@ class HandTracker:
         self._evaluate_multi_hand_landmarks(rgb_frame, all_hands)
 
     def _process_mediapipe_solutions_frame(self, rgb_frame: np.ndarray) -> None:
-        """Detect up to 2 hands using legacy MediaPipe Solutions Hands API."""
         results = self.hands_detector.process(rgb_frame)
         all_hands = [h.landmark for h in results.multi_hand_landmarks] if results.multi_hand_landmarks else []
         self._evaluate_multi_hand_landmarks(rgb_frame, all_hands)
 
     def _evaluate_multi_hand_landmarks(self, rgb_frame: np.ndarray, all_hands: List) -> None:
         """
-        Low-latency gesture & direction evaluator:
-          - `is_open_palm`: True whenever a hand has >= 4 open fingers (works anywhere on screen!)
-          - `is_two_palms`: True whenever 2 hands are visible and both have >= 3 open fingers
-          - `dir_gesture`: Hybrid Motion Delta + Zone + Pointing direction
+        Instant Combo Gesture Classifier (Finger Count + 1-Finger Pointing):
+          1. 2 Hands Open Palm (both hands have >= 3 open fingers) -> TWO_PALMS (Pause / Resume)
+          2. 1 Hand Detected:
+             - If 1 main finger (Index) is extended:
+               Checks the pointing angle from Index MCP (5) to Index Tip (8):
+                 * Pointing Up    -> UP
+                 * Pointing Down  -> DOWN
+                 * Pointing Left  -> LEFT
+                 * Pointing Right -> RIGHT
+             - If 2 main fingers (Index + Middle) are extended -> DOWN
+             - If 3 main fingers (Index + Middle + Ring) are extended -> LEFT
+             - If 4 main fingers (All 4 fingers / Open Hand) are extended -> RIGHT
+               (and also sets `is_open_palm = True` so Start/Restart works on menu screens!)
         """
         annotated = rgb_frame
         h, w, _ = annotated.shape
-        now = time.perf_counter()
 
         hands_count = len(all_hands)
         detected = hands_count > 0
         raw_gesture = config.GESTURE_NONE
         dir_gesture = config.GESTURE_NONE
+        sign_label = "NO HAND"
         is_open_palm = False
         is_two_palms = False
         open_fingers = 0
         control_pt = self.hand_pos
 
-        hand_finger_counts: List[int] = []
+        hand_main_counts: List[int] = []
+        hand_total_counts: List[int] = []
         hand_finger_states: List[List[bool]] = []
-        hand_is_palm: List[bool] = []
 
         for hand_lm in all_hands:
-            cnt, states = self._count_open_fingers(hand_lm)
-            hand_finger_counts.append(cnt)
+            total_cnt, main_cnt, states = self._count_open_fingers(hand_lm)
+            hand_total_counts.append(total_cnt)
+            hand_main_counts.append(main_cnt)
             hand_finger_states.append(states)
-            # A hand is considered an Open Palm if at least 4 fingers (e.g. Index, Middle, Ring, Pinky) are open
-            palm_ok = (cnt >= 4) or (sum(states[1:]) >= 4)
-            hand_is_palm.append(palm_ok)
             self._draw_hand_skeleton(annotated, hand_lm, w, h)
 
         # 1. Check 2-Hands Open Palm (both hands visible and open)
-        if hands_count >= 2 and hand_finger_counts[0] >= 3 and hand_finger_counts[1] >= 3:
+        if hands_count >= 2 and hand_total_counts[0] >= 3 and hand_total_counts[1] >= 3:
             is_two_palms = True
             is_open_palm = True
             raw_gesture = config.GESTURE_TWO_PALMS
-            open_fingers = hand_finger_counts[0] + hand_finger_counts[1]
+            sign_label = "2 HANDS PALM (PAUSE / RESUME)"
+            open_fingers = hand_total_counts[0] + hand_total_counts[1]
             lm0, lm1 = all_hands[0], all_hands[1]
             control_pt = (
                 float(np.clip(0.5 * (lm0[9].x + lm1[9].x), 0.0, 1.0)),
                 float(np.clip(0.5 * (lm0[9].y + lm1[9].y), 0.0, 1.0)),
             )
-            self._pos_history.clear()
 
         elif detected:
             lm = all_hands[0]
-            open_fingers = hand_finger_counts[0]
-            finger_states = hand_finger_states[0]
-            is_open_palm = hand_is_palm[0]
+            open_fingers = hand_total_counts[0]
+            main_fingers = hand_main_counts[0]  # Count of [Index, Middle, Ring, Pinky]
+            states = hand_finger_states[0]      # [Thumb, Index, Middle, Ring, Pinky]
+            control_pt = (float(np.clip(lm[8].x, 0.0, 1.0)), float(np.clip(lm[8].y, 0.0, 1.0)))
 
-            # Track Index Finger Tip (8) blended slightly with MCP/Palm (9)
-            raw_x = 0.75 * lm[8].x + 0.25 * lm[9].x
-            raw_y = 0.75 * lm[8].y + 0.25 * lm[9].y
+            # Check if hand is an Open Palm (4 main fingers open, or total >= 4)
+            if main_fingers >= 4 or open_fingers >= 4:
+                is_open_palm = True
 
-            prev_x, prev_y = self.hand_pos
-            smooth_x = float(np.clip(0.72 * raw_x + 0.28 * prev_x, 0.0, 1.0))
-            smooth_y = float(np.clip(0.72 * raw_y + 0.28 * prev_y, 0.0, 1.0))
-            control_pt = (smooth_x, smooth_y)
+            # COMBO SIGN LOGIC:
+            if main_fingers == 1:
+                # 1 Finger (usually Index) is open -> Check pointing direction (Up, Down, Left, Right)!
+                # Find which single finger is open (default to Index finger 8->5)
+                if states[1]:
+                    tip, base = lm[8], lm[5]
+                elif states[2]:
+                    tip, base = lm[12], lm[9]
+                elif states[4]:
+                    tip, base = lm[20], lm[17]
+                else:
+                    tip, base = lm[8], lm[5]
 
-            self._pos_history.append((now, smooth_x, smooth_y))
+                dx = tip.x - base.x
+                dy = tip.y - base.y  # dy < 0 is UP, dy > 0 is DOWN
 
-            # A) Instant Motion / Swipe Detection
-            motion_dir = self._detect_motion_direction(now, smooth_x, smooth_y)
+                # If pointing horizontally (Left or Right)
+                if abs(dx) > abs(dy) * 0.82:
+                    if dx > 0:
+                        raw_dir = config.GESTURE_RIGHT
+                        sign_label = "POINT RIGHT -> RIGHT"
+                    else:
+                        raw_dir = config.GESTURE_LEFT
+                        sign_label = "POINT LEFT -> LEFT"
+                else:
+                    # Pointing vertically (Up or Down)
+                    if dy > 0:
+                        raw_dir = config.GESTURE_DOWN
+                        sign_label = "POINT DOWN -> DOWN"
+                    else:
+                        raw_dir = config.GESTURE_UP
+                        sign_label = "1 FINGER / POINT UP -> UP"
 
-            # B) Position relative to calibrated neutral circle
-            dx = smooth_x - self.calib_x
-            dy = smooth_y - self.calib_y
-            dist = math.hypot(dx, dy)
-            zone_dir = config.GESTURE_NONE
-            if dist > self.neutral_radius:
+                # Draw pointing arrow from base to tip
+                bx, by = int(base.x * w), int(base.y * h)
+                tx, ty = int(tip.x * w), int(tip.y * h)
+                cv2.arrowedLine(annotated, (bx, by), (tx, ty), (0, 245, 212), 3, cv2.LINE_AA, tipLength=0.35)
+
+            elif main_fingers == 0 and states[0]:
+                # Thumb only pointing Left / Right / Up
+                dx = lm[4].x - lm[2].x
+                dy = lm[4].y - lm[2].y
                 if abs(dx) > abs(dy):
-                    zone_dir = config.GESTURE_RIGHT if dx > 0 else config.GESTURE_LEFT
+                    raw_dir = config.GESTURE_RIGHT if dx > 0 else config.GESTURE_LEFT
                 else:
-                    zone_dir = config.GESTURE_DOWN if dy > 0 else config.GESTURE_UP
+                    raw_dir = config.GESTURE_DOWN if dy > 0 else config.GESTURE_UP
+                sign_label = f"THUMB POINT -> {raw_dir}"
 
-            # C) Index finger pointing vector (MCP 5 -> TIP 8)
-            idx_dx = lm[8].x - lm[5].x
-            idx_dy = lm[8].y - lm[5].y
-            idx_len = math.hypot(idx_dx, idx_dy)
-            point_dir = config.GESTURE_NONE
-            if finger_states[1] and not finger_states[2] and not finger_states[3] and idx_len > 0.10:
-                if abs(idx_dx) > abs(idx_dy):
-                    point_dir = config.GESTURE_RIGHT if idx_dx > 0 else config.GESTURE_LEFT
-                else:
-                    point_dir = config.GESTURE_DOWN if idx_dy > 0 else config.GESTURE_UP
+            elif main_fingers == 2:
+                # 2 Fingers (Victory / Peace Sign) -> DOWN
+                raw_dir = config.GESTURE_DOWN
+                sign_label = "2 FINGERS -> DOWN"
 
-            if motion_dir != config.GESTURE_NONE:
-                dir_gesture = motion_dir
-                self._last_motion_dir = motion_dir
-                self._last_motion_time = now
-            elif point_dir != config.GESTURE_NONE:
-                dir_gesture = point_dir
-            elif (now - self._last_motion_time) < 0.22 and self._last_motion_dir != config.GESTURE_NONE:
-                dir_gesture = self._last_motion_dir
+            elif main_fingers == 3:
+                # 3 Fingers -> LEFT
+                raw_dir = config.GESTURE_LEFT
+                sign_label = "3 FINGERS -> LEFT"
+
+            elif main_fingers >= 4:
+                # 4/5 Fingers (Open Hand) -> RIGHT during gameplay (and Open Palm on Start/Game Over)
+                raw_dir = config.GESTURE_RIGHT
+                sign_label = "4/5 FINGERS -> RIGHT"
             else:
-                dir_gesture = zone_dir
+                raw_dir = config.GESTURE_NONE
+                sign_label = "FIST / NEUTRAL"
 
-            if dir_gesture != config.GESTURE_NONE:
-                raw_gesture = dir_gesture
-            elif is_open_palm:
-                raw_gesture = config.GESTURE_OPEN_PALM
-        else:
-            self._pos_history.clear()
+            # 2-frame confirmation for finger-count transitions so brief mid-motion frames don't misfire
+            if raw_dir == self._prev_raw_dir or raw_dir == self._stable_dir:
+                self._stable_dir = raw_dir
+            self._prev_raw_dir = raw_dir
 
-        self._draw_hud_overlay(
-            annotated, detected, control_pt, raw_gesture, dir_gesture, hands_count, is_open_palm
-        )
+            dir_gesture = self._stable_dir
+            raw_gesture = dir_gesture if dir_gesture != config.GESTURE_NONE else (
+                config.GESTURE_OPEN_PALM if is_open_palm else config.GESTURE_NONE
+            )
+
+        self._draw_hud_overlay(annotated, detected, sign_label, dir_gesture, hands_count)
 
         with self._lock:
             self.hand_detected = detected
             self.hands_count = hands_count
             self.open_fingers_count = open_fingers
+            self.sign_label = sign_label
             self.is_open_palm = is_open_palm
             self.is_two_palms = is_two_palms
             self.hand_pos = control_pt
@@ -448,55 +484,48 @@ class HandTracker:
             self.latest_rgb_frame = annotated
             self._frame_dirty = True
 
-    def _detect_motion_direction(self, now: float, curr_x: float, curr_y: float) -> str:
-        if len(self._pos_history) < 2:
-            return config.GESTURE_NONE
-
-        ref_t, ref_x, ref_y = self._pos_history[0]
-        for t, px, py in self._pos_history:
-            if now - t <= 0.16:
-                ref_t, ref_x, ref_y = t, px, py
-                break
-
-        vx = curr_x - ref_x
-        vy = curr_y - ref_y
-        move_dist = math.hypot(vx, vy)
-
-        if move_dist >= config.SWIPE_DELTA_THRESHOLD:
-            if abs(vx) >= abs(vy) * 1.25:
-                return config.GESTURE_RIGHT if vx > 0 else config.GESTURE_LEFT
-            elif abs(vy) >= abs(vx) * 1.25:
-                return config.GESTURE_DOWN if vy > 0 else config.GESTURE_UP
-        return config.GESTURE_NONE
-
-    def _count_open_fingers(self, lm) -> Tuple[int, List[bool]]:
+    def _count_open_fingers(self, lm) -> Tuple[int, int, List[bool]]:
         """
-        Check which of the 5 fingers [Thumb, Index, Middle, Ring, Pinky] are extended.
-        Uses relaxed wrist-to-tip vs wrist-to-PIP comparison so natural open palms
-        always register 4-5 open fingers effortlessly.
+        Accurately determine which fingers [Thumb, Index, Middle, Ring, Pinky] are extended.
+        Returns:
+          (total_open_count, main_4_fingers_open_count, states_list)
         """
         wrist = lm[0]
 
-        def dist_sq(a, b):
-            return (a.x - b.x) ** 2 + (a.y - b.y) ** 2
+        def dist(a, b):
+            return math.hypot(a.x - b.x, a.y - b.y)
 
+        # Thumb: compare tip (4) vs IP (3) distance to Pinky MCP (17)
         thumb_open = (
-            dist_sq(lm[4], lm[17]) > dist_sq(lm[3], lm[17]) * 1.08
-            and dist_sq(lm[4], wrist) > dist_sq(lm[2], wrist) * 1.06
+            dist(lm[4], lm[17]) > dist(lm[3], lm[17]) * 1.12
+            and dist(lm[4], wrist) > dist(lm[2], wrist) * 1.08
         )
 
-        finger_tips = [8, 12, 16, 20]
-        finger_pips = [6, 10, 14, 18]
-        finger_mcps = [5, 9, 13, 17]
+        # 4 Main Fingers: Index (8,6,5), Middle (12,10,9), Ring (16,14,13), Pinky (20,18,17)
+        # A finger is extended if:
+        #   1) Tip is farther from wrist than PIP joint, AND
+        #   2) Tip-to-MCP distance is at least 1.32x PIP-to-MCP distance (straight vs curled)
+        finger_triplets = [
+            (8, 6, 5),
+            (12, 10, 9),
+            (16, 14, 13),
+            (20, 18, 17),
+        ]
         states = [thumb_open]
-        for tip_idx, pip_idx, mcp_idx in zip(finger_tips, finger_pips, finger_mcps):
-            tip_d = dist_sq(lm[tip_idx], wrist)
-            pip_d = dist_sq(lm[pip_idx], wrist)
-            mcp_d = dist_sq(lm[mcp_idx], wrist)
-            is_open = (tip_d > pip_d * 1.05) and (tip_d > mcp_d * 1.15)
-            states.append(is_open)
+        main_count = 0
+        for tip_i, pip_i, mcp_i in finger_triplets:
+            tip_wrist = dist(lm[tip_i], wrist)
+            pip_wrist = dist(lm[pip_i], wrist)
+            tip_mcp = dist(lm[tip_i], lm[mcp_i])
+            pip_mcp = max(dist(lm[pip_i], lm[mcp_i]), 1e-5)
 
-        return sum(1 for s in states if s), states
+            is_open = (tip_wrist > pip_wrist * 1.04) and (tip_mcp > pip_mcp * 1.28)
+            states.append(is_open)
+            if is_open:
+                main_count += 1
+
+        total_count = main_count + (1 if thumb_open else 0)
+        return total_count, main_count, states
 
     def _draw_hand_skeleton(self, rgb_frame: np.ndarray, lm, w: int, h: int) -> None:
         connections = [
@@ -510,66 +539,39 @@ class HandTracker:
         for i, j in connections:
             cv2.line(rgb_frame, pts[i], pts[j], (0, 210, 190), 2, cv2.LINE_AA)
         for idx, pt in enumerate(pts):
-            radius = 4 if idx in (4, 8, 12, 16, 20) else 2
-            color = (255, 215, 0) if idx == 8 else (88, 166, 255)
+            radius = 5 if idx in (4, 8, 12, 16, 20) else 3
+            color = (255, 215, 0) if idx in (8, 12, 16, 20) else (88, 166, 255)
             cv2.circle(rgb_frame, pt, radius, color, -1, cv2.LINE_AA)
 
     def _draw_hud_overlay(
         self,
         rgb_frame: np.ndarray,
         detected: bool,
-        control_pt: Tuple[float, float],
-        gesture: str,
+        sign_label: str,
         dir_gesture: str,
         hands_count: int = 0,
-        is_open_palm: bool = False,
     ) -> None:
         h, w, _ = rgb_frame.shape
-        cx = int(self.calib_x * w)
-        cy = int(self.calib_y * h)
-        rad = int(self.neutral_radius * min(w, h))
-
-        cv2.line(rgb_frame, (cx - rad * 2, cy - rad * 2), (cx + rad * 2, cy + rad * 2), (55, 70, 95), 1, cv2.LINE_AA)
-        cv2.line(rgb_frame, (cx + rad * 2, cy - rad * 2), (cx - rad * 2, cy + rad * 2), (55, 70, 95), 1, cv2.LINE_AA)
-
-        zone_color = (46, 213, 115) if detected else (110, 125, 145)
-        cv2.circle(rgb_frame, (cx, cy), rad, zone_color, 2, cv2.LINE_AA)
-        cv2.circle(rgb_frame, (cx, cy), 2, zone_color, -1, cv2.LINE_AA)
-
         font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(rgb_frame, "UP", (cx - 12, max(15, cy - rad - 8)), font, 0.40, (180, 200, 220), 1, cv2.LINE_AA)
-        cv2.putText(rgb_frame, "DOWN", (cx - 20, min(h - 8, cy + rad + 16)), font, 0.40, (180, 200, 220), 1, cv2.LINE_AA)
-        cv2.putText(rgb_frame, "LEFT", (max(6, cx - rad - 40), cy + 4), font, 0.40, (180, 200, 220), 1, cv2.LINE_AA)
-        cv2.putText(rgb_frame, "RIGHT", (min(w - 48, cx + rad + 8), cy + 4), font, 0.40, (180, 200, 220), 1, cv2.LINE_AA)
 
+        # Top status bar on webcam preview showing the detected sign & direction
+        cv2.rectangle(rgb_frame, (0, 0), (w, 32), (14, 20, 30), -1)
         if hands_count >= 2:
-            cv2.putText(
-                rgb_frame,
-                "2 HANDS OPEN PALM",
-                (10, 22),
-                font,
-                0.50,
-                (255, 165, 2),
-                2,
-                cv2.LINE_AA,
-            )
-        elif detected and hands_count == 1:
-            hx = int(control_pt[0] * w)
-            hy = int(control_pt[1] * h)
-            cv2.line(rgb_frame, (cx, cy), (hx, hy), (0, 245, 212), 2, cv2.LINE_AA)
-            cv2.circle(rgb_frame, (hx, hy), 7, (0, 245, 212), 2, cv2.LINE_AA)
-            cv2.circle(rgb_frame, (hx, hy), 3, (255, 255, 255), -1, cv2.LINE_AA)
-            if is_open_palm:
-                cv2.putText(
-                    rgb_frame,
-                    "OPEN PALM DETECTED",
-                    (10, 22),
-                    font,
-                    0.48,
-                    (46, 213, 115),
-                    2,
-                    cv2.LINE_AA,
-                )
+            col = (255, 165, 2)
+            txt = "SIGN: 2 HANDS PALM (PAUSE / RESUME)"
+        elif detected:
+            col = (0, 245, 212) if dir_gesture != config.GESTURE_NONE else (46, 213, 115)
+            txt = f"SIGN: {sign_label}"
+        else:
+            col = (160, 175, 195)
+            txt = "SHOW HAND SIGN (1=UP, 2=DOWN, 3=LEFT, 4=RIGHT)"
+
+        cv2.putText(rgb_frame, txt, (10, 21), font, 0.44, col, 1, cv2.LINE_AA)
+
+        # Quick bottom legend bar on webcam preview
+        cv2.rectangle(rgb_frame, (0, h - 24), (w, h), (14, 20, 30), -1)
+        legend = "1/PtUp:UP | 2/PtDn:DOWN | 3/PtLt:LEFT | 4/PtRt:RIGHT"
+        cv2.putText(rgb_frame, legend, (8, h - 8), font, 0.36, (180, 200, 220), 1, cv2.LINE_AA)
 
     def _process_opencv_fallback_frame(self, rgb_frame: np.ndarray) -> None:
         annotated = rgb_frame
@@ -591,6 +593,7 @@ class HandTracker:
         is_two_palms = False
         control_pt = self.hand_pos
         open_fingers = 0
+        sign_label = "NO HAND"
 
         if hands_count >= 2:
             for c in valid_contours[:2]:
@@ -599,9 +602,9 @@ class HandTracker:
             is_two_palms = True
             is_open_palm = True
             open_fingers = 10
+            sign_label = "2 HANDS PALM"
         elif hands_count == 1:
             largest = valid_contours[0]
-            area = cv2.contourArea(largest)
             cv2.drawContours(annotated, [largest], -1, (0, 245, 212), 2)
             m = cv2.moments(largest)
             if m["m00"] != 0:
@@ -609,36 +612,23 @@ class HandTracker:
                 cy = (m["m01"] / m["m00"]) / h
                 control_pt = (float(np.clip(cx, 0.0, 1.0)), float(np.clip(cy, 0.0, 1.0)))
 
-            hull = cv2.convexHull(largest)
-            hull_area = cv2.contourArea(hull)
-            solidity = area / hull_area if hull_area > 0 else 1.0
+            dx = control_pt[0] - 0.5
+            dy = control_pt[1] - 0.5
+            if abs(dx) > abs(dy):
+                dir_gesture = config.GESTURE_RIGHT if dx > 0 else config.GESTURE_LEFT
+            else:
+                dir_gesture = config.GESTURE_DOWN if dy > 0 else config.GESTURE_UP
+            raw_gesture = dir_gesture
+            is_open_palm = True
+            sign_label = dir_gesture
 
-            dx = control_pt[0] - self.calib_x
-            dy = control_pt[1] - self.calib_y
-            dist = math.hypot(dx, dy)
-
-            if dist > self.neutral_radius:
-                if abs(dx) > abs(dy):
-                    dir_gesture = config.GESTURE_RIGHT if dx > 0 else config.GESTURE_LEFT
-                else:
-                    dir_gesture = config.GESTURE_DOWN if dy > 0 else config.GESTURE_UP
-
-            if solidity < 0.78:
-                is_open_palm = True
-                open_fingers = 5
-
-            raw_gesture = dir_gesture if dir_gesture != config.GESTURE_NONE else (
-                config.GESTURE_OPEN_PALM if is_open_palm else config.GESTURE_NONE
-            )
-
-        self._draw_hud_overlay(
-            annotated, detected, control_pt, raw_gesture, dir_gesture, hands_count, is_open_palm
-        )
+        self._draw_hud_overlay(annotated, detected, sign_label, dir_gesture, hands_count)
 
         with self._lock:
             self.hand_detected = detected
             self.hands_count = hands_count
             self.open_fingers_count = open_fingers
+            self.sign_label = sign_label
             self.is_open_palm = is_open_palm
             self.is_two_palms = is_two_palms
             self.hand_pos = control_pt

@@ -1,0 +1,480 @@
+/* 
+ * Stylesheet for Gesture-Controlled Snake Game (HTML/CSS/JS Frontend)
+ * Simple, clean dark neon theme.
+ */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+}
+
+body {
+    background-color: #0d1117;
+    color: #f0f6fc;
+    font-family: "Segoe UI", Verdana, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 16px;
+}
+
+.app-container {
+    width: 1120px;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Top Bar */
+.top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: #161d29;
+    border: 1px solid #303e55;
+    border-radius: 12px;
+    padding: 10px 20px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.brand h1 {
+    font-size: 26px;
+    color: #00f5d4;
+    letter-spacing: 0.5px;
+}
+
+.badge {
+    background-color: #193741;
+    color: #00f5d4;
+    border: 1px solid #00f5d4;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 3px 8px;
+    border-radius: 6px;
+}
+
+.stats-group {
+    display: flex;
+    gap: 14px;
+}
+
+.stat-pill {
+    background-color: #0d1117;
+    border: 1px solid #303e55;
+    border-radius: 10px;
+    padding: 6px 16px;
+    min-width: 130px;
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-label {
+    font-size: 11px;
+    font-weight: bold;
+    color: #8b949e;
+}
+
+.stat-value {
+    font-size: 22px;
+    font-weight: bold;
+}
+
+.top-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Main Split-Screen Layout */
+.main-layout {
+    display: flex;
+    gap: 20px;
+    align-items: stretch;
+}
+
+/* Left Side: Game Board */
+.board-wrapper {
+    position: relative;
+    width: 640px;
+    height: 600px;
+    background-color: #141a24;
+    border: 2px solid #303e55;
+    border-radius: 12px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+#gameCanvas {
+    display: block;
+    width: 640px;
+    height: 600px;
+}
+
+/* Overlays (Start, Calibrate, Pause, Game Over) */
+.overlay {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(10, 14, 22, 0.86);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    z-index: 10;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.modal-content {
+    width: 100%;
+    max-width: 520px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.small-modal {
+    background-color: #161d29;
+    border: 2px solid #303e55;
+    border-radius: 16px;
+    padding: 28px 24px;
+    max-width: 460px;
+}
+
+.border-amber {
+    border-color: #ffa502;
+}
+
+.border-danger {
+    border-color: #ff4757;
+}
+
+.modal-title {
+    font-size: 32px;
+    color: #00f5d4;
+}
+
+.modal-subtitle {
+    font-size: 15px;
+    color: #f0f6fc;
+}
+
+.modal-desc {
+    font-size: 14px;
+    color: #8b949e;
+}
+
+.modal-score {
+    font-size: 24px;
+    font-weight: bold;
+    color: #f0f6fc;
+}
+
+.modal-highscore {
+    font-size: 18px;
+    font-weight: bold;
+    color: #ffa502;
+}
+
+.new-record-badge {
+    background-color: rgba(46, 213, 115, 0.15);
+    color: #2ed573;
+    border: 1px solid #2ed573;
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.guide-cards {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 6px 0;
+}
+
+.guide-card {
+    background-color: #161e2c;
+    border: 1px solid #303e55;
+    border-radius: 10px;
+    padding: 10px 16px;
+    text-align: left;
+}
+
+.guide-card h3 {
+    font-size: 15px;
+    color: #58a6ff;
+    margin-bottom: 3px;
+}
+
+.guide-card p {
+    font-size: 13px;
+    color: #8b949e;
+}
+
+.calib-status {
+    font-size: 20px;
+    font-weight: bold;
+    color: #ffa502;
+    margin: 10px 0;
+}
+
+.modal-btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.modal-hint {
+    font-size: 12px;
+    color: #8b949e;
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: #2ed573;
+    color: #0a140f;
+    font-size: 15px;
+    font-weight: bold;
+    border: none;
+    border-radius: 10px;
+    padding: 13px 24px;
+    cursor: pointer;
+    transition: transform 0.1s ease, filter 0.15s ease;
+}
+
+.btn-primary:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background-color: #1c2536;
+    color: #f0f6fc;
+    border: 1px solid #303e55;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.btn-secondary:hover {
+    border-color: #58a6ff;
+}
+
+.btn-secondary.active-green {
+    border-color: #2ed573;
+    color: #2ed573;
+}
+
+/* Right Side: Webcam & Controls Panel */
+.side-panel {
+    flex: 1;
+    background-color: #161d29;
+    border: 2px solid #303e55;
+    border-radius: 14px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.panel-header h2 {
+    font-size: 17px;
+    color: #f0f6fc;
+}
+
+.hand-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #ffa502;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #ffa502;
+}
+
+.status-dot.locked {
+    background-color: #2ed573;
+}
+
+.webcam-box {
+    width: 360px;
+    height: 270px;
+    margin: 0 auto;
+    border: 2px solid #303e55;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #101620;
+}
+
+.webcam-box.locked {
+    border-color: #00f5d4;
+}
+
+#webcamFeed {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.gesture-banner {
+    background-color: #101620;
+    border: 1px solid #303e55;
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.gesture-label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #8b949e;
+}
+
+.gesture-value {
+    font-size: 15px;
+    font-weight: bold;
+    color: #8b949e;
+}
+
+.difficulty-section,
+.guide-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Board Theme & Snake Style Dropdowns */
+.customization-row {
+    display: flex;
+    gap: 10px;
+}
+
+.select-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.custom-select {
+    background-color: #101620;
+    color: #f0f6fc;
+    border: 1px solid #303e55;
+    border-radius: 7px;
+    padding: 7px 8px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    outline: none;
+}
+
+.custom-select:hover,
+.custom-select:focus {
+    border-color: #00f5d4;
+}
+
+.section-label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #8b949e;
+}
+
+.difficulty-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.diff-btn {
+    flex: 1;
+    background-color: #101620;
+    color: #8b949e;
+    border: 1px solid #303e55;
+    border-radius: 7px;
+    padding: 8px 0;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.diff-btn.active[data-diff="EASY"] {
+    background-color: #1e2c3e;
+    border: 2px solid #2ed573;
+    color: #2ed573;
+}
+
+.diff-btn.active[data-diff="MEDIUM"] {
+    background-color: #1e2c3e;
+    border: 2px solid #ffa502;
+    color: #ffa502;
+}
+
+.diff-btn.active[data-diff="HARD"] {
+    background-color: #1e2c3e;
+    border: 2px solid #ff4757;
+    color: #ff4757;
+}
+
+.guide-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.guide-list li {
+    background-color: #111721;
+    border-radius: 6px;
+    padding: 6px 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+}
+
+.guide-list li span {
+    color: #f0f6fc;
+}
+
+.guide-list li strong {
+    color: #00f5d4;
+}
+
+/* Utility Accent Colors */
+.accent-blue { color: #58a6ff !important; }
+.accent-amber { color: #ffa502 !important; }
+.accent-cyan { color: #00f5d4 !important; }
+.accent-danger { color: #ff4757 !important; }
+.accent-green { color: #2ed573 !important; }
+

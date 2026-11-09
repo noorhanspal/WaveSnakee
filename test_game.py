@@ -60,7 +60,30 @@ class TestSnakeGame(unittest.TestCase):
         from hand_tracker import HandTracker
         tracker = HandTracker(camera_index=0)
         self.assertIn(tracker.mode, ("MP_TASKS", "MP_SOLUTIONS"))
+        jpeg = tracker.get_jpeg_bytes()
+        self.assertIsNotNone(jpeg)
+        self.assertTrue(len(jpeg) > 100)
         tracker.stop()
+
+    def test_web_backend_controller_state_and_actions(self):
+        from app import BackendController
+        ctrl = BackendController(camera_index=0, headless_test=True)
+        ctrl.start()
+        try:
+            initial = ctrl.get_state_dict()
+            self.assertEqual(initial["state"], "START")
+
+            ctrl.handle_action("start")
+            playing = ctrl.get_state_dict()
+            self.assertEqual(playing["state"], "PLAYING")
+
+            ctrl.handle_action("direction", "DOWN")
+            self.assertEqual(ctrl.game.next_direction, config.DIR_DOWN)
+
+            ctrl.handle_action("pause")
+            self.assertEqual(ctrl.get_state_dict()["state"], "PAUSED")
+        finally:
+            ctrl.stop()
 
 
 if __name__ == "__main__":

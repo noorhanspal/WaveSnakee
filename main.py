@@ -256,14 +256,22 @@ class GestureSnakeApp:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Gesture-Controlled Snake Game using MediaPipe & Pygame")
+    parser = argparse.ArgumentParser(
+        description="Gesture-Controlled Snake Game (Python Backend + HTML/CSS/JS Web Frontend)"
+    )
     parser.add_argument("--camera", type=int, default=0, help="Webcam device index (default: 0)")
+    parser.add_argument("--port", type=int, default=5000, help="Web server port (default: 5000)")
+    parser.add_argument("--pygame", action="store_true", help="Run the desktop Pygame window instead of Web UI")
     parser.add_argument("--headless-test", action="store_true", help="Run a quick automated smoke test and exit")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    app = GestureSnakeApp(camera_index=args.camera, headless_test=args.headless_test)
-    app.run()
+    if args.pygame or args.headless_test:
+        app = GestureSnakeApp(camera_index=args.camera, headless_test=args.headless_test)
+        app.run()
+    else:
+        from app import run_web_app
+        run_web_app(port=args.port, camera_index=args.camera, open_browser=True)
 

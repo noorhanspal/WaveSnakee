@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Snake Game - Python + HTML/CSS/JS</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Header Bar -->
+        <header class="top-bar">
+            <div class="brand">
+                <h1>GESTURE SNAKE</h1>
+                <span class="badge">PYTHON + CV</span>
+            </div>
+
+            <div class="stats-group">
+                <div class="stat-pill">
+                    <span class="stat-label">SCORE</span>
+                    <span id="scoreValue" class="stat-value accent-blue">0</span>
+                </div>
+                <div class="stat-pill">
+                    <span class="stat-label">HIGH SCORE</span>
+                    <span id="highScoreValue" class="stat-value accent-amber">0</span>
+                </div>
+            </div>
+
+            <div class="top-actions">
+                <button id="calibrateBtn" class="btn-secondary" title="Calibrate Hand Center (Key C)">
+                    Calibrate (C)
+                </button>
+                <button id="soundBtn" class="btn-secondary active-green" title="Toggle Sound Effects">
+                    Sound: ON
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Split-Screen Area -->
+        <main class="main-layout">
+            <!-- Left Side: Snake Game Board & Overlays -->
+            <section class="board-wrapper">
+                <canvas id="gameCanvas" width="640" height="600"></canvas>
+
+                <!-- 1. Start Screen & Gesture Guide Overlay -->
+                <div id="startOverlay" class="overlay">
+                    <div class="modal-content">
+                        <h2 class="modal-title">HAND GESTURE SNAKE</h2>
+                        <p class="modal-subtitle">
+                            Control the snake in real-time using your webcam and hand gestures!
+                        </p>
+
+                        <div class="guide-cards">
+                            <div class="guide-card">
+                                <h3>1 FINGER (☝️) or POINT UP / DOWN / LEFT / RIGHT</h3>
+                                <p>Show 1 finger for UP, or point your index finger in any direction!</p>
+                            </div>
+                            <div class="guide-card">
+                                <h3>FINGER COUNT SIGNS (1 = UP, 2 = DOWN, 3 = LEFT, 4 = RIGHT)</h3>
+                                <p>Show 1, 2, 3, or 4 fingers for instant turns without moving your arm</p>
+                            </div>
+                            <div class="guide-card">
+                                <h3>SHOW 2 OPEN PALMS (BOTH HANDS)</h3>
+                                <p>Show both open hands to Pause or Resume the game</p>
+                            </div>
+                            <div class="guide-card">
+                                <h3>SHOW 1 OPEN PALM</h3>
+                                <p>Hold one open hand briefly to Start or Restart the game</p>
+                            </div>
+                        </div>
+
+                        <button id="startBtn" class="btn-primary">
+                            SHOW 1 OPEN PALM or CLICK TO START
+                        </button>
+                        <p class="modal-hint">
+                            Tip: Press 'C' to calibrate your hand before starting | Arrow keys also work
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 2. Hand Calibration Overlay -->
+                <div id="calibrateOverlay" class="overlay hidden">
+                    <div class="modal-content small-modal">
+                        <h2 class="modal-title accent-blue">HAND CALIBRATION</h2>
+                        <p class="modal-subtitle">
+                            Hold your hand in a comfortable position in front of the webcam.
+                        </p>
+                        <p class="modal-desc">
+                            That position will become the Center Neutral Circle for Up, Down, Left, and Right turns.
+                        </p>
+                        <div id="calibStatusText" class="calib-status">
+                            Waiting for hand in webcam view...
+                        </div>
+                        <div class="modal-btn-row">
+                            <button id="lockCalibBtn" class="btn-primary">Lock Center Now (Space)</button>
+                            <button id="resetCalibBtn" class="btn-secondary">Reset Center (R)</button>
+                            <button id="cancelCalibBtn" class="btn-secondary">Cancel (Esc)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Pause Screen Overlay -->
+                <div id="pauseOverlay" class="overlay hidden">
+                    <div class="modal-content small-modal border-amber">
+                        <h2 class="modal-title accent-amber">GAME PAUSED</h2>
+                        <p class="modal-score">Current Score: <span id="pauseScore">0</span></p>
+                        <p class="modal-desc accent-cyan">
+                            Show 2 OPEN PALMS (Both Hands) or click Resume to continue
+                        </p>
+                        <div class="modal-btn-row">
+                            <button id="resumeBtn" class="btn-primary">Resume Game (P)</button>
+                            <button id="pauseRestartBtn" class="btn-secondary">Restart (R)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Game Over Screen Overlay -->
+                <div id="gameOverOverlay" class="overlay hidden">
+                    <div class="modal-content small-modal border-danger">
+                        <h2 class="modal-title accent-danger">GAME OVER</h2>
+                        <p id="deathReasonText" class="modal-desc">Wall Collision!</p>
+                        <p class="modal-score">Final Score: <span id="finalScore">0</span></p>
+                        <p class="modal-highscore">Best Score: <span id="bestScore">0</span></p>
+                        <div id="newHighScoreBadge" class="new-record-badge hidden">
+                            NEW HIGH SCORE!
+                        </div>
+                        <button id="restartBtn" class="btn-primary">
+                            SHOW 1 OPEN PALM or CLICK PLAY AGAIN
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Side: Live Webcam Feed, Active Gesture & Controls -->
+            <aside class="side-panel">
+                <div class="panel-header">
+                    <h2>LIVE HAND TRACKER</h2>
+                    <div class="hand-status">
+                        <span id="handDot" class="status-dot"></span>
+                        <span id="handStatusText">Show Hand</span>
+                    </div>
+                </div>
+
+                <!-- Live Webcam Video Stream from Python OpenCV + MediaPipe -->
+                <div id="webcamBox" class="webcam-box">
+                    <img id="webcamFeed" src="/video_feed" alt="Live Webcam Stream">
+                </div>
+
+                <!-- Active Detected Gesture Box -->
+                <div id="gestureBanner" class="gesture-banner">
+                    <span class="gesture-label">ACTIVE GESTURE:</span>
+                    <span id="gestureValue" class="gesture-value">NEUTRAL / IDLE</span>
+                </div>
+
+                <!-- Difficulty / Speed Selector -->
+                <div class="difficulty-section">
+                    <span class="section-label">SPEED / DIFFICULTY (KEYS 1, 2, 3):</span>
+                    <div class="difficulty-buttons">
+                        <button class="diff-btn" data-diff="EASY">EASY</button>
+                        <button class="diff-btn active" data-diff="MEDIUM">MEDIUM</button>
+                        <button class="diff-btn" data-diff="HARD">HARD</button>
+                    </div>
+                </div>
+
+                <!-- Board Theme & Snake Skin Selectors -->
+                <div class="customization-row">
+                    <div class="select-group">
+                        <label for="boardThemeSelect" class="section-label">BOARD THEME:</label>
+                        <select id="boardThemeSelect" class="custom-select">
+                            <option value="grass">Garden Grass 3D</option>
+                            <option value="cyber">Cyberpunk Circuit</option>
+                            <option value="ocean">Ocean Coral Reef</option>
+                            <option value="desert">Sahara Desert Dunes</option>
+                            <option value="retro">80s Synthwave Stars</option>
+                        </select>
+                    </div>
+
+                    <div class="select-group">
+                        <label for="snakeSkinSelect" class="section-label">3D SNAKE SKIN:</label>
+                        <select id="snakeSkinSelect" class="custom-select">
+                            <option value="cyan">3D Neon Cyan</option>
+                            <option value="fire">3D Fire Dragon</option>
+                            <option value="rainbow">3D Rainbow Slither</option>
+                            <option value="emerald">3D Emerald Viper</option>
+                            <option value="gold">3D Royal Gold</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Gesture Controls Quick Guide -->
+                <div class="guide-section">
+                    <span class="section-label accent-blue">HAND SIGN CONTROLS (COMBO):</span>
+                    <ul class="guide-list">
+                        <li>
+                            <span>1 Finger (☝️) / Point Up</span>
+                            <strong>Turn Snake UP</strong>
+                        </li>
+                        <li>
+                            <span>2 Fingers (✌️) / Point Down</span>
+                            <strong>Turn Snake DOWN</strong>
+                        </li>
+                        <li>
+                            <span>3 Fingers (🤟) / Point Left</span>
+                            <strong>Turn Snake LEFT</strong>
+                        </li>
+                        <li>
+                            <span>4/5 Fingers (🖐️) / Point Right</span>
+                            <strong>Turn Snake RIGHT</strong>
+                        </li>
+                        <li>
+                            <span>2 Hands Open Palm</span>
+                            <strong>Pause / Resume Game</strong>
+                        </li>
+                    </ul>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
+
